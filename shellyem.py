@@ -71,7 +71,7 @@ def display_data(values):
         display.text(f"SOLAR: {values['solar']:.2f} kW", 10, 40, scale=3)
 
     display.set_pen(CYAN if values['grid'] < 0 else ORANGE)
-    display.text(f"NET: {values['grid']:.2f} kW", 10, 70, scale=3)
+    display.text(f"FLOW: {values['grid']:.2f} kW", 10, 70, scale=3)
 
     display.set_pen(WHITE)
     display.text(f"Update time: {values['time']}", 10, HEIGHT - 20, scale=2)
