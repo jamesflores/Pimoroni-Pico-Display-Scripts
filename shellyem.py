@@ -55,6 +55,7 @@ def fetch_shelly_data():
         return {"grid": grid, "solar": solar, "home": home, "time": shelly_time}
     except Exception as e:
         print("Error fetching data:", e)
+        reconnect_wifi()
         return None
 
 def display_data(values):
@@ -71,7 +72,7 @@ def display_data(values):
         display.text(f"SOLAR: {values['solar']:.2f} kW", 10, 40, scale=3)
 
     display.set_pen(CYAN if values['grid'] < 0 else ORANGE)
-    display.text(f"NET: {values['grid']:.2f} kW", 10, 70, scale=3)
+    display.text(f"FLOW: {values['grid']:.2f} kW", 10, 70, scale=3)
 
     display.set_pen(WHITE)
     display.text(f"Update time: {values['time']}", 10, HEIGHT - 20, scale=2)
@@ -87,6 +88,43 @@ def display_message(msg, color):
         display.text(line, 10, y, scale=2)
         y += 25
     display.update()
+    
+def update_led(flow, tick_time):
+    brightness = 16  # Half brightness (max is 32)
+
+    if flow < 0:
+        # Slow pulsing green every 2s
+        if int(tick_time) % 2 == 0:
+            led.set_rgb(0, brightness, 0)
+        else:
+            led.set_rgb(0, 0, 0)
+    elif 0 <= flow <= 3:
+        # Solid blue for normal usage
+        led.set_rgb(0, 0, brightness)
+    elif 3 < flow <= 5:
+        # Solid orange for moderate usage
+        led.set_rgb(brightness, brightness // 2, 0)
+    else:
+        # >5kW fast blinking red
+        if int(tick_time * 5) % 2 == 0:
+            led.set_rgb(brightness, 0, 0)
+        else:
+            led.set_rgb(0, 0, 0)
+            
+def reconnect_wifi():
+    wlan = network.WLAN(network.STA_IF)
+    if not wlan.isconnected():
+        print("Reconnecting WiFi...")
+        wlan.disconnect()
+        wlan.active(True)
+        wlan.connect(SSID, PASSWORD)
+        for _ in range(15):
+            if wlan.status() == 3:
+                print("WiFi reconnected successfully.")
+                return True
+            time.sleep(1)
+        print("WiFi reconnection failed.")
+    return False
 
 # Start
 led.set_rgb(0, 0, 0)
@@ -103,30 +141,32 @@ if not connect_wifi():
 
 last_update = 0
 values = None
+
 while True:
     now = time.time()
+    tick_time = time.ticks_ms() / 1000
     button_pressed = button_a.read() or button_b.read() or button_x.read() or button_y.read()
 
     if button_pressed:
         display_message("Refreshing...", WHITE)
-        led.set_rgb(0, 0, 32)  # Blue while fetching
         values = fetch_shelly_data()
         if values:
             display_data(values)
-            led.set_rgb(0, 32, 0)  # Green success
         else:
             display_message("Failed to\nget data", RED)
-            led.set_rgb(32, 0, 0)
         last_update = now
 
     elif now - last_update > UPDATE_INTERVAL:
         values = fetch_shelly_data()
         if values:
             display_data(values)
-            led.set_rgb(0, 32, 0)  # Green success
         else:
             display_message("Failed to\nget data", RED)
-            led.set_rgb(32, 0, 0)
         last_update = now
+
+    # Update LED status based on latest flow reading
+    if values:
+        flow = values['grid']
+        update_led(flow, tick_time)
 
     time.sleep(0.1)
